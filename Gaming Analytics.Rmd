@@ -1,5 +1,5 @@
 ---
-title: "EA Sports - Data Challenge"
+title: "Game Analytics"
 author: "Praveen Reddy Guntaka"
 date: "9/21/2020"
 output:
