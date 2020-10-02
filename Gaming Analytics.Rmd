@@ -1,0 +1,863 @@
+---
+title: "EA Sports - Data Challenge"
+author: "Praveen Reddy Guntaka"
+date: "9/21/2020"
+output:
+  html_document:
+    code_folding: hide
+theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos="https://cran.rstudio.com" )
+options(warn=-1)
+```
+# {.tabset .tabset-fade .tabset-pills}
+
+
+<style>
+div.hidecode + pre {display: none}
+</style>
+
+<div class="hidecode"></div>
+
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 19px;
+      font-family: "Times New Roman", Times, serif;
+        font-weight: normal;
+
+  }
+td {  /* Table  */
+  font-size: 14px;
+}
+h1.title {
+  font-size: 40px;
+}
+h1 { /* Header 1 */
+  font-size: 28px;
+    font-style: bold;
+        font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 26px;
+    font-family: "Times New Roman", Times, serif;
+      font-weight: bold;
+  color: DarkBlue;
+}
+
+h3 { /* Header 3 */
+  font-size: 22px;
+  font-family: "Times New Roman", Times, serif;
+    font-weight: bold;
+      font-style: italic;
+
+  color: Green;
+}
+h4 { /* Header 4 */
+  font-size: 20px;
+  font-family: "Times New Roman", Times, serif;
+  font-weight: bold;
+  color: DarkBlue;
+  
+}
+
+code.r{ /* Code block */
+    font-size: 14px;
+}
+pre { /* Code block -  */
+    font-size: 16px;
+}
+</style>
+
+## **Business Problem - Approach**
+
+A marketing partner reached out to us to see if past player behavior can be predictive of future purchases. After connecting with analytics peers, I received the following data about players:
+
+•	**player_sample** contains a set of players ids and their purchase date of FIFA 18 (or NULL if the player didn’t purchase the game)
+
+•	**player_purchases** contains the purchase date of all the games owned by the player, as well as the game genre and the launch date of the game.
+
+•	**player_logins** contains the dates when the players logged in (some of) the games they own. For each login date, the number of logins that occurred on that day is reported.
+
+•	**player_spend** contains the dates when the player purchased some extra content for the games that they own.
+
+#### **Summary:**
+
+Using the available data, I will present you with the most interesting insights & a machine learning model to predict the probability 'that a player will purchase FIFA 18' & evaluate this to determine whether the performance of the model is acceptable or not? In the end, I will mention a couple of suggestions as the next steps to improve the performance of the model.
+
+#### **Approach:**
+
+For building a predictive model we must need to understand the purchase behavior of a player as it is the best predictor of repeat purchasing and loyalty. While it is measured in different ways, depending on industry and customer lifecycle, all database marketers covet its empirical facts, for this challenge we will focus on how often users purchase a game, login to a game, and shop more for additional game accessories. Further, purchase behavior is about how much they spend (purchase a game/accessories.), how much they use (log in to a game), and in what combination or sequence. Purchase behavior codifies both the tenure as well as the recency of your relationship with your customers.
+
+Recency, Frequency, & Monetary Value (RFM) is a quick, descriptive way to segment a marketing
+database on purchasing behavior.
+
+**Recency (R):** is the time since the last purchase (here it is purchasing previous versions of FIFA), or meaningful transaction, that our player makes. The more recent the last action, the higher the likelihood our players will respond to the next campaign, promotion, etc. This value includes the number of days player took to purchase since the launch date of previous version (of FIFA).
+
+**Frequency (F):** is how often a user has a login to a game. It is typically a “Life to Date” field, and thus would be the accumulation of all logins from original date to the updated date. For this problem, this value includes the aggregate sum of logins.
+
+**Monetary Value (M)** is the sum of all revenue earned from a user. Judgment is used to decide between “Life to Date” dollars, “Average” dollars, or some dollar amount over time. For this problem, this value includes monetary value brought by the player either by purchasing a complete version (of previous FIFA-versions) or by additional accessories (or both).
+
+**Step 1:**
+Descriptive Analytics, which refers to a critical process of performing initial investigations on data so as to discover patterns, spot anomalies, to test hypothesis, and to check assumptions with the help of summary statistics and graphical representations.
+
+**Step 2:**
+Data Wrangling, which is the process of cleaning, structuring, and enriching raw data into the desired format for better decision making. Our model will perform better by feeding Recency, Frequency, & Monetary Value (RFM). In this step, we convert the data into RFM. We then feed this to our model to predict the probability.
+
+**Step 3:**
+Predictive Analytics, here we use statistical models to understand the future purchase behavior from the past trend. We will build a logistic regression model & evaluate the performance.
+
+**Step 4:**
+Player Segmentation, here we use a mixture of marketing and machine learning techniques to advise on possible outcomes. We will segment users and look at the group to find the best fit for the target audience for FIFA 19.
+
+**Step 5:**
+Present the key findings and suggestions as the next steps to improve the performance of the model.
+
+## **Installing Required packages & Loading Data**
+
+#### Installing packages
+```{r class.source = "watch-out", warning=FALSE, error=FALSE, message=FALSE}
+
+packages<- c("knitr",                 # To Knit the code into HTML output
+             "sqldf",                 # To connect R with SQL
+             "dplyr",                 # Data Wrangling
+             "magrittr",              # Display data on the screen
+             "Amelia",                # Data Visualisation
+             "tidyverse",             # Data Visualisation
+             "plotly",                # Interactive plots for data visualization
+             "InformationValue",      # For calculating Optimal Cut-off
+             'lubridate',             # For date-time manupulation
+             'car',                   # To calculate multicolleniarity
+             'boot',                  # To perform cross-validation
+             'cluster',               # clustering algorithms
+             'factoextra',             # clustering algorithms & visualization
+             'widgetframe'
+               )
+
+for (pkg in packages){
+        if (!(pkg %in% installed.packages()[, "Package"])) 
+        {install.packages(pkg); }}
+
+
+# Load the required packages into session 
+
+for (pkg in packages){
+        library(pkg,character.only=TRUE,quietly=TRUE)}
+```
+
+Required packages are installed.
+
+
+#### Loading Data into Dataframes
+```{r}
+#Loading Data
+player_logins <- read.csv('player_logins.csv')
+player_purchases <- read.csv('player_purchases.csv')
+player_spend <- read.csv('player_spend.csv')
+player_sample <- read.csv('player_sample.csv')
+
+```
+<br>
+Loading player_logins, player_purchases, player_spend & player_sample into R-Dataframes.
+
+## **Descriptive Analytics**  {.tabset }
+
+### **Exploratory Data Analysis**
+
+#### player_purchases
+
+Let's look at the distribution of purchases accross games.
+
+```{r}
+player_purchases_eda <- player_purchases
+player_purchases_eda$count <- c(1)
+
+plot_ly(player_purchases_eda, x =~game_name, y=~count,type="bar",mode="markers", colors = "Set1") %>%
+  layout(title = "Game perchases",
+         yaxis = list(title = "Purchases",showgrid = T),
+         xaxis = list(title = "",showgrid = F))
+```
+
+FIFA is most purchased game, let us look at the percentage of FIFA purchases.
+
+```{r}
+print(paste('Percentage of FIFA purchases : ',sum(player_purchases_eda$count[player_purchases_eda$game_name=='FIFA 17'|player_purchases_eda$game_name=='FIFA 16'|player_purchases_eda$game_name=='FIFA 15'|player_purchases_eda$game_name=='FIFA 14'])*100/sum(player_purchases_eda$count)))
+```
+
+Close to **40 %** of the purchases are FIFA.
+
+
+Let's now look at login's.
+
+#### player_logins
+
+```{r}
+
+player_logins_eda <- aggregate(login_count ~ game_name, player_logins, sum)
+
+plot_ly(player_logins_eda, x =~game_name, y=~login_count,type="bar",mode="markers", colors = "Set1") %>%
+  layout(title = "Number of logins per game",
+         yaxis = list(title = "logins",showgrid = T),
+         xaxis = list(title = "", showgrid = F))
+```
+
+Once again FIFA dominates all other games.
+
+```{r}
+print(paste('Percentage of users logging-in to play FIFA : ', sum(player_logins_eda$login_count[player_logins_eda$game_name=='FIFA 17'|player_logins_eda$game_name=='FIFA 16'|player_logins_eda$game_name=='FIFA 15'|player_logins_eda$game_name=='FIFA 14'])*100/sum(player_logins_eda$login_count)))
+```
+There are two important observations noted here:
+
+**1)** Over **72 %** of the game logins are from FIFA.
+
+**2)** There are some **users who logged into FIFA 18**, let's look at the number in the following section.
+
+```{r}
+print(paste('Unique users logged in to FIFA 18:', length(player_logins$login_day[player_logins$game_name=='FIFA 18'])))
+```
+
+This is surprising and raised a new question, is there any player(s) who played the game even before purchase? 
+
+lets find out !!!
+
+#### Slicing data frames
+
+```{r}
+# Subsetting dataframes for our business problem.
+player_logins <- subset(player_logins, game_name == 'FIFA 14' | game_name == 'FIFA 15' | game_name == 'FIFA 16' | game_name == 'FIFA 17')
+
+player_purchases <- subset(player_purchases, game_name == 'FIFA 14' | game_name == 'FIFA 15' | game_name == 'FIFA 16' | game_name == 'FIFA 17')
+
+player_spend <- subset(player_spend, game_name == 'FIFA 14' | game_name == 'FIFA 15' | game_name == 'FIFA 16' | game_name == 'FIFA 17')
+
+```
+Focusing on FIFA users only. So, sliced the data, i.e... including only observations related to FIFA.
+
+#### trial users
+```{r}
+#trial -ve
+users_NOT_purchased_but_loggedIn<- sqldf('SELECT * FROM  player_logins t1
+                  LEFT JOIN  player_purchases t2
+                  ON t1.id = t2.id AND t1.game_name = t2.game_name
+                  WHERE purchase_date is null')
+
+#trial +ve
+users_logged_before_purchase_and_purchased <- sqldf('SELECT * FROM  player_logins  t1
+                  LEFT JOIN player_purchases t2
+                  ON t1.id = t2.id AND t1.game_name = t2.game_name
+                  WHERE purchase_date > login_day')
+
+print(paste('Users who logged-in to the game before launch date and purchased: ', length(unique(users_logged_before_purchase_and_purchased$id))))
+print(paste('Users who logged-in to the game before purchase and NOT purchased: ', length(unique(users_NOT_purchased_but_loggedIn$id))))
+
+#trial_users_not_purchased[is.na(trial_users_not_purchased)] <- 0
+trial_users_not_purchased <- subset(users_NOT_purchased_but_loggedIn, select = c('id'))
+trial_users_purchased <- subset(users_logged_before_purchase_and_purchased, select = c('id'))
+
+trial_users<-unique(Reduce(function(x, y) merge(x, y, all=TRUE), list(trial_users_not_purchased, trial_users_purchased )))
+```
+
+We have **1471 unique users** logging into the game before the launch date. 
+
+I'm assuming they are either trial/beta users. 
+
+Now let's look at our sample data to check the behavior of these users.
+
+#### player_sample Data set
+```{r}
+#Understanding Sample Data
+
+player_sample$purchase_date <- sub("^$", 0, player_sample$purchase_date)
+player_sample$purchase_date[player_sample$purchase_date != 0] <- 1
+player_sample$purchase_date <- as.numeric(player_sample$purchase_date)
+colnames(player_sample) <- c('Purchase', 'id')
+```
+player_sample data set has **2500 purchased and 2500 non-purchased players**, a perfectly balanced dataset.
+
+####
+```{r}
+player_sample_trial = data.frame(subset(player_sample, (id %in% trial_users$id)))
+player_sample_without_trial = data.frame(subset(player_sample, !(id %in% trial_users$id)))
+
+print(paste('Users who logged-in to the game before launch date (trial Users): ', length((player_sample_trial$id))))
+print(paste('Users who logged-in to the game after purchase (Normal Users): ', length((player_sample_without_trial$id))))
+
+```
+
+**1471 unique users** who logged-in to the game before purchase (in player_sample), lets call them trial users.
+
+Separating trial users from normal users in player_sample to check their purchase behavior.
+
+```{r}
+#understanding trial-users
+print(paste('Percentage of purchases in trial users: ',sum(player_sample_trial$Purchase)/length(player_sample_trial$id)))
+```
+Conclusion : **78% of trial users** purchased FIFA 18. This is an excellent catch to decide on marketing trial versions.
+
+### **Data Wrangling**  
+#### player_purchases Data Set
+```{r}
+#How many unique players in this dataset?
+print(paste('Unique users in player_logins: ',length(unique(player_purchases[["id"]]))))
+
+#Structure of the data
+str(player_purchases)
+
+#Converting 'game_launch_date' & 'purchase_date'  from factor format to Data format
+player_purchases$game_launch_date <- ymd(player_purchases$game_launch_date)
+player_purchases$purchase_date <- ymd(player_purchases$purchase_date)
+str(player_purchases)
+```
+We can see that there are **3338 unique users** who had purchased previous versions of FIFA.
+
+Now let's look at the structure of our data frame, **purchase_date** attribute is taken as a factor, we converted this to date format, which will be used to build **Recency**.
+
+```{r}
+#Dealing with the missing data
+player_purchases$game_launch_date[player_purchases$game_name == 'FIFA 14'] <- as.Date('2013-09-23')
+```
+With a brief inspection, we see game_launch_date is missing. Imputing this with a quick research on the FIFA 14.
+
+```{r}
+
+#Calculating recency with 'game_launch_date' & 'purchase_date' for the previous versions
+player_purchases$Recency <- as.numeric(
+  difftime(player_purchases$purchase_date, player_purchases$game_launch_date+4, units = "days") 
+)
+
+player_purchases_agg1 <- aggregate(Recency ~ id, player_purchases, mean) # Used as Recency
+```
+
+Now we calculated recency from player_purchases.
+
+**Recency (R):** is the time since last purchase, here it is purchasing previous versions of FIFA. This value is the difference (days) between launch day to purchase day.
+
+**Calculating Recency:**
+
+1) Subtracting Game launch date from the purchase date.
+
+2) Aggregating average by grouping with player id.
+
+```{r}
+player_purchases <- player_purchases %>% 
+  mutate(Money_spent = case_when(
+    game_name == 'FIFA 14'  ~  100,
+    game_name == 'FIFA 15'  ~  110,
+    game_name == 'FIFA 16'  ~  121,
+    game_name == 'FIFA 17'  ~  133.1
+  )
+)
+
+player_purchases_agg2 <- aggregate(Money_spent ~ id, player_purchases, sum) # Building Monetary Value
+
+player_purchases_agg <- sqldf('SELECT * FROM player_purchases_agg1
+                     LEFT JOIN player_purchases_agg2
+                     USING(id)')
+```
+Now we began to calculate Monetary value.
+
+**Monetary Value (M):** is the revenue earned from a user. This value includes value brought by the player, either by buying a complete version (previous FIFA-versions) or by additional accessories.
+
+**Calculating Monetary Value: Part-1**
+
+1) Assuming a value, say 100, as the revenue earned from a player buying FIFA 14. Increasing 10% for each successive version.
+
+2) Aggregating sum by grouping with player id.
+
+Used SQL to join data frames.
+
+#### player_logins Data Set
+```{r}
+#Looking at logins Data Frame
+
+player_logins_agg <- aggregate(login_count ~ id, player_logins, sum) # Used as Frequency
+colnames(player_logins_agg) <- c('id', 'Frequency')
+
+
+# Identify outliers        
+#outliers <- boxplot(player_logins_agg$Frequency, plot = FALSE)$out
+
+outliers <- max(player_logins_agg$Frequency)
+# Remove outliers
+player_logins_agg <-player_logins_agg[!(player_logins_agg$Frequency %in% outliers), ]
+
+```
+
+
+**Frequency (F):** is how often a user has a login to a game. This value includes the aggregate sum of logins.
+
+**Calculating Frequency**
+
+1) Aggregating sum by grouping with player id.
+
+#### player_spend Data Set
+```{r}
+#Manipulating Send Data Frame
+
+# Giving weights to the purchase wrt the version
+player_spend <- player_spend %>% 
+  mutate(spent = case_when(
+    game_name == 'FIFA 14'  ~ 5,
+    game_name == 'FIFA 15'  ~ 5.5,
+    game_name == 'FIFA 16'  ~ 6.05,
+    game_name == 'FIFA 17'  ~ 6.655
+  )
+)
+
+player_spend_agg <- aggregate(spent ~ id, player_spend, sum)
+```
+
+**Calculating Monetary Value: Part-2**
+
+1) We assumed a value, say 100, as the revenue earned from a player buying FIFA 14. Now we make another assumption, *average spend on accessories is 5 % of the product value*.
+
+2) Aggregating sum by grouping with player id.
+
+```{r}
+purchase_spend_combined <- sqldf('SELECT * FROM player_purchases_agg2
+                     LEFT JOIN player_spend_agg
+                     USING(id)')
+
+purchase_spend_combined$spent[is.na(purchase_spend_combined$spent)] <- 0 
+
+
+purchase_spend_combined$Monetary <- purchase_spend_combined$spent + purchase_spend_combined$Money_spent
+
+
+purchase_spend_combined <- purchase_spend_combined[c(1,4)] # Used as Monetary
+colnames(purchase_spend_combined) <- c('id', 'Monetary') 
+
+
+```
+
+**Calculating Monetary Value: Part-3**
+
+1) Now we join our results from Part-1 and Part-2.
+
+2) Add them to get Monetary Value.
+
+#### Integrating datasets
+
+```{r}
+#Mergin Data Frames
+
+player_sample_logins <- sqldf('SELECT * FROM player_sample
+                     LEFT JOIN player_logins_agg
+                     USING(id)')
+player_sample_logins_spend <- sqldf('SELECT * FROM player_sample_logins
+                     LEFT JOIN purchase_spend_combined
+                     USING(id)')
+
+player_combined <- sqldf('SELECT * FROM player_sample_logins_spend
+                     LEFT JOIN player_purchases_agg1
+                     USING(id)')
+
+head(player_combined)
+```
+
+Now that we have seen all the data sets, it's that time we integrate all and proceed to build a model.
+
+```{r}
+#Removing trial Users from the data
+player_combined = data.frame(subset(player_combined, !(id %in% trial_users$id)))
+```
+
+Removing trial users form our data, because including them may result in biased prediction. As many of the normal players might not get to use trial version.
+
+
+Since we have some missing values in the combined dataset we will investigate as following.
+
+#### Missing Value Imputation
+
+```{r}
+library(Amelia)
+missmap(player_combined, main = "Missing values vs observed")
+```
+
+The above plot helps us to understand the missing percentage in our combined dataset.
+
+```{r}
+# Removing observations if entire row is blank
+player_combined <- player_combined[rowSums(is.na(player_combined)) != ncol(player_combined)-2,]
+
+#Replacing NA's in Activity & Monetary with 0
+player_combined$Frequency[is.na(player_combined$Frequency)] <- 0 
+player_combined$Monetary[is.na(player_combined$Monetary)] <- 0
+# 
+# #Filling NA's in Recency with Maximum Value
+player_combined$Recency[is.na(player_combined$Recency)] <-  max(player_combined$Recency, na.rm=TRUE)
+```
+
+Missing value imputation:
+
+1) Removed entire observation if 'Recency', 'Frequency' & 'Monetary Value' is null.
+
+2) Filling NA's/Nulls with 0's if its Frequency or Monetary, the maximum value of recency if it's Recency. 
+
+```{r}
+missmap(player_combined, main = "Missing values vs observed")
+```
+
+
+#### Scaling Variables
+```{r}
+#Standerdizing the data
+
+player_combined_scaled <- transform(player_combined, Frequency = (Frequency - min(Frequency)) / (max(Frequency) - min(Frequency)))
+player_combined_scaled <- transform(player_combined_scaled, Monetary = (Monetary - min(Monetary)) / (max(Monetary) - min(Monetary)))
+player_combined_scaled <- transform(player_combined_scaled, Recency = (Recency - min(Recency)) / (max(Recency) - min(Recency)))
+```
+
+Scaled our observations for not letting the model weigh according to the magnitude.
+
+#### Adjusting for interpretability
+```{r}
+#Arranging columns for interpretability
+player_combined_scaled$Purchase <- as.numeric(player_combined_scaled$Purchase)
+player_combined_scaled <- player_combined_scaled[c(2,5,4,3,1)]
+head(player_combined_scaled)
+```
+
+
+## **Predictive Analytics** {.tabset}
+
+### **Predictive Modeling**
+#### Test-Train split
+```{r}
+#Train Test Split
+# Set Seed so that same sample can be reproduced in future
+set.seed(101) 
+# Now Selecting 75% of data as sample from total 'n' rows of the data  
+sample <- sample.int(n = nrow(player_combined_scaled), size = floor(.75*nrow(player_combined_scaled)), replace = F)
+train <- player_combined_scaled[sample, ]
+test  <- player_combined_scaled[-sample, ]
+
+print(paste('Training observations : ', length(train$id)))
+print(paste('Testing observations : ', length(test$id)))
+
+#Adjusting Test Data set
+test_onlyPurchase <- subset(test, select = c("id","Purchase"))
+test_withoutPurchase <- subset(test, select = c("id","Recency",'Frequency', "Monetary"))
+```
+
+Splitting our data as train and test data, to build and evaluate the model.
+
+#### Model Building (Logistic Regression)
+```{r}
+#Building machine learning model to predic the probability of a 'player purchasing FIFA 18'
+mylogit <- glm(Purchase ~  Recency + Monetary+ Frequency, data = train, family = 'binomial')
+```
+
+We now build a Predictive model, by using known results to develop (or train), which will be used to predict probabilities for new data. 
+
+The modeling results in predictions that represent a probability of the target variable (purchase probability) based on estimated significance from a set of input variables.
+
+#### Model Diagnostics
+```{r}
+summary(mylogit)
+```
+
+**Model conclusions:**
+
+**1)** 'Recency', 'Frequency' & 'Monetary Value' are all significant i.e... they are all important to predict the probability of a new player.
+
+**2)** Frequency is the most important factor, which means the user who loggs in the most will have a better probability of purchase.
+
+#### Checking for multicollinearity
+```{r}
+#Variance Inflation Factor
+vif(mylogit)
+```
+
+Multicollinearity means two or more variables feeding the same information into the model, which results in a biased probability. But, here we do not have that problem. The variance inflation factor for all three variables is < 10.
+
+#### Predicting the probabilities
+```{r}
+test_withoutPurchase$predicted_prob <- predict(mylogit, newdata = test_withoutPurchase, type = "response")
+head(test_withoutPurchase)
+```
+
+Extracted probability for a testing observation as predicted_prob.
+
+#### Probabilities to Class
+```{r}
+#Converting probabilities to classes with cutoff probability
+optCutOff <- optimalCutoff(test_onlyPurchase$Purchase, test_withoutPurchase$predicted_prob)[1]
+print(paste('Optimal cutoff point: ', optCutOff))
+test_withoutPurchase$predicted <- ifelse(test_withoutPurchase$predicted_prob >= optCutOff, 1, 0)  
+head(test_withoutPurchase)
+```
+
+Used optimalCutoff function to transfer these probabilities into actions (1 - id purchase, 0 - no purchase).
+
+### **Model Evaluation**
+
+#### Model evaluation on training examples
+#### K-fold cross-validation
+```{r}
+set.seed(101)
+cv_errors = data.frame(delta1 = 0, delta2 = 0)
+for (i in 1:10) {
+  model_cv = glm(Purchase ~  Recency + Monetary+ Frequency, data = train, family = 'binomial')
+  cv_errors[i, ] = cv.glm(train, model_cv, K=10)$delta
+}
+ 
+print(paste('Training Accuracy for the model : ', round(1-mean(cv_errors$delta2),2)))
+```
+
+Performed K-fold cross-validation to evaluate the model. With over 80 % accuracy our model is ready to predict.
+
+#### Evaluation on Test data
+#### Confusion Matrix
+```{r}
+# Creating confusion matrix
+confusionMatrix(test_onlyPurchase$Purchase, test_withoutPurchase$predicted, threshold = optCutOff)
+```
+
+The above Confusion Matrix helps us to visualize how training examples were classified by our model. Our testing set holds 518 observations out of which 409 observations were rightly classified.
+
+#### Miss-Classification Rate
+```{r}
+# Plotting Miss Classification error
+misClasificError=misClassError(test_onlyPurchase$Purchase, test_withoutPurchase$predicted, threshold = optCutOff)
+print(paste('Accuracy on testing examples :',round(1-misClasificError, 2)))
+print(paste('Missclassicafication Rate :',round(misClasificError, 2)))
+```
+
+Measured accuracy of testing examples, resulted in 79 % accuracy for the prediction. 
+
+#### ROC - AUC
+```{r}
+#Plotting ROC curve
+plotROC(test_onlyPurchase$Purchase, test_withoutPurchase$predicted_prob)
+```
+
+ROC is a probability curve and AUC represents the degree or measure of separability. It tells how much the model is capable of distinguishing between classes. It depends on the threshold value, when we decrease the threshold, we get more positive values and vice versa.
+
+## **Player Segmentation**
+
+player segmentation is dividing a broad consumer base into sub-groups of users based on some type of shared characteristics. This will help our business to strategize the target audience for the pre-launch campaign (FIFA 2019).
+
+```{r}
+#Dividing scaled variables into 4-quantiles
+segmented <- player_combined_scaled
+
+segmented$Frequency_Quantile <- ntile(segmented$Frequency, 4) 
+segmented$Monetary_Quantile <- ntile(segmented$Monetary, 4) 
+segmented$Recency_Quantile <- ntile(-1*segmented$Recency, 4) 
+
+#Concatinating Relevency, Frequency & Monetary.
+segmented$Group <- paste(segmented$Recency_Quantile, segmented$Frequency_Quantile, segmented$Monetary_Quantile)
+
+
+segmented_group <- subset(segmented, select = c('id', 'Group', 'Purchase'))
+head(segmented_group)
+```
+
+The simplest way to create player segments from RFM Model is to use Quartiles. We assign a score from 1 to 4 to Recency, Frequency, and Monetary. Four is the best/highest value, and one is the lowest/worst value. A final RFM score is calculated simply by combining individual RFM score numbers.
+
+
+```{r}
+
+#Cluster Analysis
+segmented <- subset(segmented, select = c('id', 'Recency','Frequency', 'Monetary', 'Group', 'Purchase'))
+wssplot <- function(data, nc=18, seed=1234){
+  wss <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] <- sum(kmeans(data, centers=i)$withinss)}
+  plot(1:nc, wss, type="b", xlab="Number of Clusters",
+       ylab="Within groups sum of squares")}
+wssplot(segmented[,2:4])
+```
+
+I would like to combine machine learning with RFM segmentation, to perform K-means clustering we visualize elbow-plot to select the right number of clusters.
+
+After trial and error from 3 to 6 clusters, I choose to go with 3 clusters.
+
+#### Clustering
+```{r}
+
+#K-means clustersing
+set.seed(101)
+kmeansCluster <- kmeans(segmented[,2:4], centers = 3, nstart = 25)
+```
+
+```{r}
+str(kmeansCluster)
+```
+
+
+```{r}
+#fviz_cluster(player_cluster_result, data = player_cluster[,1:2])
+
+fviz_cluster(kmeansCluster, data = segmented[,2:4], geom = "point",
+             stand = FALSE, ellipse.type = "norm") + 
+  theme_bw() + scale_y_continuous(labels = scales::comma) +
+  ggtitle(label='Player Clusters')
+```
+
+2-D visualization of clusters, we can see that clusters are not completely separable but I will try to utilize the best of this segregation.
+
+```{r}
+
+for (i in 1:3) {
+  
+  cluster <- segmented[kmeansCluster$cluster == i,]
+  cluster$cluster <- c(i)
+  if(i==1){ 
+    player_clusters<- cluster
+    } else {
+      player_clusters <- Reduce(function(x, y) merge(x, y, all=TRUE), list(player_clusters, cluster))
+    }
+  
+}
+
+player_clusters <- subset(player_clusters, select = c('id','cluster'))
+
+player_combined_clusters <- sqldf('SELECT * FROM segmented as t1
+                                  LEFT JOIN player_clusters as t2
+                                  USING(id)') 
+
+player_combined_clusters <- subset(player_combined_clusters, select = c('id', 'Group', 'Purchase' ,'cluster'))
+head(player_combined_clusters)
+```
+
+Tagged cluster numbers to users.
+
+
+```{r}
+player_combined_clusters$count <- c(1)
+player_combined_clusters$cluster <- as.factor(player_combined_clusters$cluster)
+plot_ly(player_combined_clusters, x =~Group, y=~count,type="bar",mode="markers", color= ~ cluster) %>%
+  layout(title = "Cluster values on segmented groups",
+         yaxis = list(title = "Count",showgrid = T),
+         xaxis = list(title = "Group",showgrid = F))
+```
+
+Conclusion:
+
+**1)** These players bring medium monetary value to the company with medium number of logins, they segregated as in cluster 1. **-Valuable users**
+
+**2)** Combination of Frequent logins and high monetary value users are in cluster two. **-Active users**
+
+**3)** Users with low monetary value & logins with the highest recency score (purchased long back) are clustered in 3rd group. **-Inactive users**
+
+
+```{r}
+
+for (i in 1:3) {
+  
+  print(paste('Probability of purchase from cluster-: ', 
+              i, 
+              ' : ' ,
+              round(sum(player_combined_clusters$Purchase[player_combined_clusters$cluster == i])/sum(player_combined_clusters$count[player_combined_clusters$cluster == i]),2),
+              ' ::: User base', 
+              round(sum(player_combined_clusters$count[player_combined_clusters$cluster == i])/sum(length(segmented$id)+length(trial_users$id)),2)))
+  
+}
+
+```
+
+By the result we can understand that Active users (cluster-2) purchase rate is over 80% with a 14% customer base, this is our most promising group for marketing.
+
+## **Conclusions and Recommendations**
+
+####**Most Interesting Insights:**
+
+1) Apart from the launch date, the next frequent purchases are recorded on **Christmas, Dec 15**.
+
+2) From initial Exploratory Data Analysis, we observed **1471** unique users who logged in to the game before the launch date. Therefore, I assumed them as users who use trial version and then decide on a purchase.
+
+3) Analysing trial/beta users resulted that over **75 %** of these users purchased FIFA-18. Based on our assumption and result, we can consider this as a special group. If we market (ex: send Free trial) our next release to these users with **75 %** expected conversion (purchases).
+
+4) Though 'Recency', 'Frequency' & 'Monetary Value' are all significant i.e... they are all important to predict the probability of a new player, frequency stood out being the most important factor, i.e... the more frequent a user login to the game, more chances that he/she will purchase.
+
+####**Predictive Modeling:**
+
+We have seen the importance of **Recency, Frequency, & Monetary Value (RFM)** in marketing to predict the purchasing behavior of an active player So, I transformed the given information into RFM and build Logistic Regression to extract the probability of purchase.
+
+
+####**Model Evaluation:**
+
+**Metrics:**
+
+
+•	**Training Accuracy:** 81.3 %
+
+	Training Accuracy is the accuracy of a model on examples it was constructed on.
+	
+	Method Used : 10-fold cross-validation
+	
+	With 10-fold cross-validation we divided our training set into 10 sets and pass 9 sets to build the model and measure accuracy with the 10th set, repeated 10 times. In simple terms, this is used to measure how well our model understood the pattern of our training examples. 
+	
+ 
+	
+	
+•	**Testing Accuracy :** 79 %
+	
+	Test accuracy is the accuracy of a model on examples it hasn't seen.
+	
+	Method Used : Confusion Matrix
+	
+	Confusion matrix helps us to visualize how testing exams are classified when compared to an actual label. 132 users were correctly classified as 0 (will not purchase) & 277 users were correctly classified as 1 (will purchase) out of 518 users in the testing set.
+	
+	
+•	**ROC AUC :** 0.82
+	
+	ROC is a probability curve and AUC represents the degree or measure of separability. It tells how much the model is capable of distinguishing between classes. It depends on the threshold value, when we decrease the threshold, we get more positive values and vice versa.
+
+  
+Machine learning model performance is relative and ideas of what score a good model can achieve only make sense and can only be interpreted in the context, we cannot achieve the best score (best ~ 100% accuracy), but it is good to know what the best possible performance is for our chosen measure. We have close to 80 % accuracy with a limited number of observations, this may increase by increasing the volume (number of observations).
+
+
+####**Next steps to improve the performance of the model:**
+
+**1)** **1471** users who are assumed to be trial users were removed from the model, building a dedicated predictive model on these users can result in predicting the purchase behavior of trial users.
+
+**2)** More data, better prediction. In analytics, more data almost always lead to more stable prediction. We have 5000 observation and out of which 1471 observations were removed assuming them to be trial players, in addition to that 1460 users from the player_samples data set have no past behavior from player_logins, player_purchases, and player_spend,  So I used 2069 in the final set to build predictive model, therefore I suggest to re-run with more data.
+
+####**Players recommendation for the pre-launch campaign :**
+
+**1)** Our primary concentration should be on a player who actively responds and purchase, I recommend Active players (cluster-2) who are 14 % customer base and has purchase probability over 0.8. *Remind them with advertisements.*
+
+**2)** Players who used trial period for previous versions are interesting, with a 41 % customer base, and close to 80 % purchase rate these players can be lucrative. *Send free trial versions.*
+
+
+####**Players recommendation for December 2018 campaign:**
+
+I would change my recommendation for the December campaign because in the above two recommendations I suggested going with the most reliable customers, of which 80 % would have already purchased the product by December. 
+
+For the December campaign I will recommend targeting valuable customers (cluster-1), who is from 40 % customer base, they might be intrigued by this campaign as they are not very frequent users, but provided holiday season they might purchase.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
